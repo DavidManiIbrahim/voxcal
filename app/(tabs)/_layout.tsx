@@ -42,7 +42,7 @@ export default function TabLayout() {
       />
       <Tabs.Screen
         name="explore"
-        options={{ href: null }} // Hide the explore tab if we don't delete the file, or just let me delete it later
+        options={{ href: null }} 
       />
     </Tabs>
   );
