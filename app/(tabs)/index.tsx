@@ -1,98 +1,176 @@
-import { Image } from 'expo-image';
-import { Platform, StyleSheet } from 'react-native';
 
-import { HelloWave } from '@/components/hello-wave';
-import ParallaxScrollView from '@/components/parallax-scroll-view';
+import { Ionicons } from '@expo/vector-icons';
+import { addMonths, format, isSameDay, subMonths } from 'date-fns';
+import { useNavigation, useRouter } from 'expo-router';
+import React, { useState } from 'react';
+import { FlatList, StyleSheet, TouchableOpacity, View } from 'react-native';
+
+import { CalendarMonth } from '@/components/CalendarMonth'; // Oops, I named it that
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
-import { Link } from 'expo-router';
+import { useApp } from '@/contexts/AppContext';
 
-export default function HomeScreen() {
+export default function CalendarScreen() {
+  const router = useRouter();
+  const navigation = useNavigation();
+  const { events } = useApp();
+
+  const [currentDate, setCurrentDate] = useState(new Date());
+  const [selectedDate, setSelectedDate] = useState(new Date());
+
+  const eventsForSelectedDate = events.filter(event =>
+    isSameDay(new Date(event.startDate), selectedDate)
+  ).sort((a, b) => new Date(a.startDate).getTime() - new Date(b.startDate).getTime());
+
+  // Optimize event map for calendar dots
+  const eventsMap = events.reduce((acc, event) => {
+    const dateKey = format(new Date(event.startDate), 'yyyy-MM-dd');
+    acc[dateKey] = true;
+    return acc;
+  }, {} as Record<string, boolean>);
+
+  const handleNextMonth = () => setCurrentDate(addMonths(currentDate, 1));
+  const handlePrevMonth = () => setCurrentDate(subMonths(currentDate, 1));
+
+  const renderEventItem = ({ item }) => (
+    <TouchableOpacity
+      style={styles.eventItem}
+      onPress={() => router.push({ pathname: '/modal', params: { id: item.id } })} // Edit event
+    >
+      <View style={styles.eventTimeContainer}>
+        <ThemedText style={styles.eventTime}>
+          {format(new Date(item.startDate), 'HH:mm')}
+        </ThemedText>
+        <ThemedText style={styles.eventEndTime}>
+          {item.endDate ? format(new Date(item.endDate), 'HH:mm') : ''}
+        </ThemedText>
+      </View>
+      <View style={[styles.eventContent, { borderLeftColor: item.calendarColor || '#2196F3' }]}>
+        <ThemedText type="defaultSemiBold">{item.title}</ThemedText>
+        {item.notes && <ThemedText numberOfLines={1} style={styles.eventNote}>{item.notes}</ThemedText>}
+        {item.alarmId && <Ionicons name="alarm" size={14} color="#666" />}
+      </View>
+    </TouchableOpacity>
+  );
+
   return (
-    <ParallaxScrollView
-      headerBackgroundColor={{ light: '#A1CEDC', dark: '#1D3D47' }}
-      headerImage={
-        <Image
-          source={require('@/assets/images/partial-react-logo.png')}
-          style={styles.reactLogo}
-        />
-      }>
-      <ThemedView style={styles.titleContainer}>
-        <ThemedText type="title">Welcome!</ThemedText>
-        <HelloWave />
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Step 1: Try it</ThemedText>
-        <ThemedText>
-          Edit <ThemedText type="defaultSemiBold">app/(tabs)/index.tsx</ThemedText> to see changes.
-          Press{' '}
-          <ThemedText type="defaultSemiBold">
-            {Platform.select({
-              ios: 'cmd + d',
-              android: 'cmd + m',
-              web: 'F12',
-            })}
-          </ThemedText>{' '}
-          to open developer tools.
-        </ThemedText>
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <Link href="/modal">
-          <Link.Trigger>
-            <ThemedText type="subtitle">Step 2: Explore</ThemedText>
-          </Link.Trigger>
-          <Link.Preview />
-          <Link.Menu>
-            <Link.MenuAction title="Action" icon="cube" onPress={() => alert('Action pressed')} />
-            <Link.MenuAction
-              title="Share"
-              icon="square.and.arrow.up"
-              onPress={() => alert('Share pressed')}
-            />
-            <Link.Menu title="More" icon="ellipsis">
-              <Link.MenuAction
-                title="Delete"
-                icon="trash"
-                destructive
-                onPress={() => alert('Delete pressed')}
-              />
-            </Link.Menu>
-          </Link.Menu>
-        </Link>
+    <ThemedView style={styles.container}>
+      {/* Header */}
+      <View style={styles.header}>
+        <TouchableOpacity onPress={handlePrevMonth}>
+          <Ionicons name="chevron-back" size={24} color="#666" />
+        </TouchableOpacity>
+        <ThemedText type="subtitle">{format(currentDate, 'MMMM yyyy')}</ThemedText>
+        <TouchableOpacity onPress={handleNextMonth}>
+          <Ionicons name="chevron-forward" size={24} color="#666" />
+        </TouchableOpacity>
+      </View>
 
-        <ThemedText>
-          {`Tap the Explore tab to learn more about what's included in this starter app.`}
-        </ThemedText>
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Step 3: Get a fresh start</ThemedText>
-        <ThemedText>
-          {`When you're ready, run `}
-          <ThemedText type="defaultSemiBold">npm run reset-project</ThemedText> to get a fresh{' '}
-          <ThemedText type="defaultSemiBold">app</ThemedText> directory. This will move the current{' '}
-          <ThemedText type="defaultSemiBold">app</ThemedText> to{' '}
-          <ThemedText type="defaultSemiBold">app-example</ThemedText>.
-        </ThemedText>
-      </ThemedView>
-    </ParallaxScrollView>
+      {/* Calendar Grid */}
+      <CalendarMonth
+        currentDate={currentDate}
+        selectedDate={selectedDate}
+        onSelectDate={setSelectedDate}
+        events={eventsMap}
+      />
+
+      {/* Selected Date Header */}
+      <View style={styles.dateHeader}>
+        <ThemedText type="link">{format(selectedDate, 'EEEE, MMMM d')}</ThemedText>
+      </View>
+
+      {/* Events List */}
+      <FlatList
+        data={eventsForSelectedDate}
+        keyExtractor={item => item.id}
+        renderItem={renderEventItem}
+        contentContainerStyle={styles.listContent}
+        ListEmptyComponent={
+          <View style={styles.emptyState}>
+            <ThemedText>No events for this day.</ThemedText>
+          </View>
+        }
+      />
+
+      {/* FAB */}
+      <TouchableOpacity
+        style={styles.fab}
+        onPress={() => router.push({ pathname: '/modal', params: { date: selectedDate.toISOString() } })}
+      >
+        <Ionicons name="add" size={32} color="#fff" />
+      </TouchableOpacity>
+    </ThemedView>
   );
 }
 
 const styles = StyleSheet.create({
-  titleContainer: {
+  container: {
+    flex: 1,
+  },
+  header: {
     flexDirection: 'row',
+    justifyContent: 'space-between',
     alignItems: 'center',
-    gap: 8,
+    padding: 16,
   },
-  stepContainer: {
-    gap: 8,
-    marginBottom: 8,
+  dateHeader: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    backgroundColor: '#f0f0f033',
   },
-  reactLogo: {
-    height: 178,
-    width: 290,
-    bottom: 0,
-    left: 0,
+  listContent: {
+    padding: 16,
+    paddingBottom: 80,
+  },
+  eventItem: {
+    flexDirection: 'row',
+    marginBottom: 12,
+    backgroundColor: 'rgba(255,255,255,0.05)',
+    borderRadius: 8,
+    overflow: 'hidden',
+  },
+  eventTimeContainer: {
+    padding: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    width: 60,
+  },
+  eventTime: {
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  eventEndTime: {
+    fontSize: 12,
+    opacity: 0.6,
+  },
+  eventContent: {
+    flex: 1,
+    padding: 10,
+    borderLeftWidth: 4,
+    justifyContent: 'center',
+  },
+  eventNote: {
+    fontSize: 12,
+    opacity: 0.7,
+  },
+  emptyState: {
+    padding: 20,
+    alignItems: 'center',
+  },
+  fab: {
     position: 'absolute',
+    right: 20,
+    bottom: 20,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: '#2196F3',
+    justifyContent: 'center',
+    alignItems: 'center',
+    elevation: 4,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
   },
 });

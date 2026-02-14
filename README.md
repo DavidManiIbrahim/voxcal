@@ -1,50 +1,48 @@
-# Welcome to your Expo app 👋
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+# VoxCal - Voice Calendar & Alarm System
 
-## Get started
+Production ready cross-platform mobile app combining Calendar, Alarm Clock, and Voice Reminders.
 
-1. Install dependencies
+## Core Features
 
+- **Clean Minimal Interface**: Daily, Weekly (month view with day list) calendar.
+- **Smart Alarms**: System-level notifications that trigger even when app is closed.
+- **Voice Reminders**: Spoken Text-to-Speech announcements for events.
+- **Escalation Protocol**: Alarms automatically escalate (+5m, +15m) if ignored.
+- **Offline First**: All data stored locally on device.
+- **Dark Mode**: Fully supported with adaptive UI.
+
+## Getting Started
+
+1. Install dependencies:
    ```bash
    npm install
    ```
 
-2. Start the app
-
+2. Start the app:
    ```bash
    npx expo start
    ```
 
-In the output, you'll find options to open the app in a
+3. Run on device:
+   - Scan the QR code with Expo Go (Android/iOS).
+   - Or run `npm run android` / `npm run ios`.
 
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
+## Architecture
 
-You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
+- **Framework**: React Native (Expo).
+- **Navigation**: Expo Router (File-based routing).
+- **State**: React Context + AsyncStorage.
+- **Services**:
+  - `NotificationService`: Handles scheduling and permissions.
+  - `VoiceService`: Text-to-Speech engine.
+  - `StorageService`: Local persistence.
+- **UI Components**: Custom Calendar Month view, Themed components.
 
-## Get a fresh project
+## Permissions
 
-When you're ready, run:
+The app requires permissions for:
+- Notifications (to schedule alarms).
+- Audio (to play sounds/voice).
 
-```bash
-npm run reset-project
-```
-
-This command will move the starter code to the **app-example** directory and create a blank **app** directory where you can start developing.
-
-## Learn more
-
-To learn more about developing your project with Expo, look at the following resources:
-
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
-
-## Join the community
-
-Join our community of developers creating universal apps.
-
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+Built with defined best practices for production reliability.
