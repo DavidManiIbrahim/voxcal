@@ -7,6 +7,7 @@ import React, { createContext, useContext, useEffect, useState } from 'react';
 interface AppState {
     events: VoxEvent[];
     addEvent: (event: VoxEvent) => void;
+    updateEvent: (event: VoxEvent) => void;
     deleteEvent: (id: string) => void;
     snoozeAlarm: (id: string) => void;
     isLoading: boolean;
@@ -62,8 +63,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                     title: 'VoxCal: ' + event.title,
                     body: event.notes || 'Event Starting Now',
                     data: { eventId: event.id, type: event.reminderType, isPrimary: true },
-                    sound: 'default' // Add custom sound file to assets/ and reference here if configured
+                    sound: event.sound || 'default'
                 },
+
                 trigger,
             });
             ids.push(id1);
@@ -77,7 +79,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                     body: 'You missed your event! Tap to view details.',
                     data: { eventId: event.id, type: event.reminderType, isEscalation: true },
                     badge: 1,
-                    sound: 'default'
+                    sound: event.sound || 'default'
                 },
                 trigger: escalation1,
             });
@@ -92,7 +94,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                     body: 'Final Reminder! Please check your schedule.',
                     data: { eventId: event.id, type: event.reminderType, isEscalation: true },
                     badge: 2,
-                    sound: 'default'
+                    sound: event.sound || 'default'
                 },
                 trigger: escalation2,
             });
@@ -105,6 +107,20 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             ];
             setAlarms(newAlarms);
             await StorageService.saveAlarms(newAlarms);
+        }
+    };
+
+    const updateEvent = async (updatedEvent: VoxEvent) => {
+        const newEvents = events.map(e => e.id === updatedEvent.id ? updatedEvent : e);
+        setEvents(newEvents);
+        await StorageService.saveEvents(newEvents);
+
+        // Cancel old alarms for this event
+        await cancelEventAlarms(updatedEvent.id);
+
+        // Schedule new alarms if needed
+        if (updatedEvent.alarmId) {
+            await scheduleEventAlarm(updatedEvent);
         }
     };
 
@@ -159,7 +175,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                     title: 'Snoozed: ' + event.title,
                     body: event.notes,
                     data: { eventId: event.id, type: event.reminderType },
-                    sound: 'default'
+                    sound: event.sound || 'default'
                 },
                 trigger
             });
@@ -167,7 +183,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     };
 
     return (
-        <AppContext.Provider value={{ events, addEvent, deleteEvent, snoozeAlarm, isLoading }}>
+        <AppContext.Provider value={{ events, addEvent, updateEvent, deleteEvent, snoozeAlarm, isLoading }}>
             {children}
         </AppContext.Provider>
     );

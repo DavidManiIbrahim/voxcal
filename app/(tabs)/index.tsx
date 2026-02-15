@@ -39,10 +39,10 @@ export default function CalendarScreen() {
     >
       <View style={styles.eventTimeContainer}>
         <ThemedText style={styles.eventTime}>
-          {format(new Date(item.startDate), 'HH:mm')}
+          {format(new Date(item.startDate), 'h:mm a')}
         </ThemedText>
         <ThemedText style={styles.eventEndTime}>
-          {item.endDate ? format(new Date(item.endDate), 'HH:mm') : ''}
+          {item.endDate ? format(new Date(item.endDate), 'h:mm a') : ''}
         </ThemedText>
       </View>
       <View style={[styles.eventContent, { borderLeftColor: item.calendarColor || '#2196F3' }]}>
@@ -50,7 +50,7 @@ export default function CalendarScreen() {
         {item.notes && <ThemedText numberOfLines={1} style={styles.eventNote}>{item.notes}</ThemedText>}
         {item.alarmId && <Ionicons name="alarm" size={14} color="#666" />}
       </View>
-    </TouchableOpacity>
+    </TouchableOpacity >
   );
 
   return (

@@ -13,6 +13,7 @@ export interface VoxEvent {
     notes?: string;
     alarmId?: string;
     reminderType?: 'voice' | 'standard';
+    sound?: string; // e.g. 'default', 'bell', 'chime'
 }
 
 export interface VoxAlarm {
