@@ -1,6 +1,8 @@
 
+import { StorageService } from '@/services/StorageService';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { format } from 'date-fns';
+import * as DocumentPicker from 'expo-document-picker';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useEffect, useState } from 'react';
 import { Button, Platform, ScrollView, StyleSheet, Switch, TextInput, TouchableOpacity, View } from 'react-native';
@@ -102,6 +104,23 @@ export default function EventModal() {
     setPickerMode(mode);
   };
 
+  const handlePickSound = async () => {
+    try {
+      const result = await DocumentPicker.getDocumentAsync({
+        type: 'audio/*',
+        copyToCacheDirectory: true
+      });
+
+      if (result.assets && result.assets[0]) {
+        const uri = result.assets[0].uri;
+        const savedUri = await StorageService.saveSoundFile(uri);
+        setSound(savedUri);
+      }
+    } catch (err) {
+      console.error("Error picking sound", err);
+    }
+  };
+
   return (
     <ThemedView style={styles.container}>
       <ScrollView contentContainerStyle={styles.scroll}>
@@ -185,7 +204,26 @@ export default function EventModal() {
                   <ThemedText style={{ fontWeight: sound === s ? 'bold' : 'normal' }}>{s}</ThemedText>
                 </TouchableOpacity>
               ))}
+
+              <TouchableOpacity
+                onPress={handlePickSound}
+                style={{
+                  paddingHorizontal: 16,
+                  paddingVertical: 8,
+                  borderRadius: 20,
+                  backgroundColor: (sound !== 'Default' && sound !== 'Chime' && sound !== 'Beep' && sound !== 'Cosmic') ? '#2196F3' : 'rgba(255,255,255,0.1)',
+                  borderWidth: 1,
+                  borderColor: (sound !== 'Default' && sound !== 'Chime' && sound !== 'Beep' && sound !== 'Cosmic') ? '#2196F3' : 'rgba(255,255,255,0.2)',
+                }}
+              >
+                <ThemedText>+ Upload MP3</ThemedText>
+              </TouchableOpacity>
             </View>
+            {(sound !== 'Default' && sound !== 'Chime' && sound !== 'Beep' && sound !== 'Cosmic') && (
+              <ThemedText style={{ marginTop: 8, fontSize: 12, opacity: 0.7 }} numberOfLines={1}>
+                Selected: {sound.split('/').pop()}
+              </ThemedText>
+            )}
           </View>
         )}
 

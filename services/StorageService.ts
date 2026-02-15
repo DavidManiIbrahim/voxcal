@@ -65,5 +65,32 @@ export const StorageService = {
 
     async clearAll() {
         await AsyncStorage.clear();
+    },
+
+    async saveSoundFile(uri: string): Promise<string> {
+        try {
+            // Lazy load to avoid cycle or error if not installed yet (though we just installed it)
+            const FileSystem = require('expo-file-system');
+
+            const soundsDir = FileSystem.documentDirectory + 'sounds/';
+            const dirInfo = await FileSystem.getInfoAsync(soundsDir);
+
+            if (!dirInfo.exists) {
+                await FileSystem.makeDirectoryAsync(soundsDir, { intermediates: true });
+            }
+
+            const filename = uri.split('/').pop() || `sound_${Date.now()}.mp3`;
+            const dest = soundsDir + filename;
+
+            await FileSystem.copyAsync({
+                from: uri,
+                to: dest
+            });
+
+            return dest;
+        } catch (e) {
+            console.error('Error saving sound file', e);
+            return uri; // Fallback to original URI if copy fails (though might be temporary cache)
+        }
     }
 };
