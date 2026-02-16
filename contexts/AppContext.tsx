@@ -1,4 +1,3 @@
-
 import { StorageService, VoxAlarm, VoxEvent } from '@/services/StorageService';
 import { VoiceService } from '@/services/VoiceService';
 import { useMutation, useQuery } from "convex/react";
@@ -63,6 +62,67 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         }
     };
 
+    const scheduleEventAlarm = async (event: VoxEvent) => {
+        const trigger = new Date(event.startDate);
+        const now = new Date();
+
+        // Only schedule if in future
+        if (trigger.getTime() > now.getTime()) {
+            const ids: string[] = [];
+
+            // 1. Primary Alarm
+            const id1 = await Notifications.scheduleNotificationAsync({
+                content: {
+                    title: 'VoxCal: ' + event.title,
+                    body: event.notes || 'Event Starting Now',
+                    data: { eventId: event.id, type: event.reminderType, isPrimary: true },
+                    sound: event.sound || 'default'
+                },
+
+                trigger,
+            });
+            ids.push(id1);
+
+            // 2. Escalation 1 (+5 mins) - "Alarms that escalate if ignored"
+            // If the user doesn't dismiss the first one (i.e. open app), this triggers
+            const escalation1 = new Date(trigger.getTime() + 5 * 60000);
+            const id2 = await Notifications.scheduleNotificationAsync({
+                content: {
+                    title: 'MISSED: ' + event.title,
+                    body: 'You missed your event! Tap to view details.',
+                    data: { eventId: event.id, type: event.reminderType, isEscalation: true },
+                    badge: 1,
+                    sound: event.sound || 'default'
+                },
+                trigger: escalation1,
+            });
+            ids.push(id2);
+
+
+            // 3. Escalation 2 (+15 mins)
+            const escalation2 = new Date(trigger.getTime() + 15 * 60000);
+            const id3 = await Notifications.scheduleNotificationAsync({
+                content: {
+                    title: 'URGENT: ' + event.title,
+                    body: 'Final Reminder! Please check your schedule.',
+                    data: { eventId: event.id, type: event.reminderType, isEscalation: true },
+                    badge: 2,
+                    sound: event.sound || 'default'
+                },
+                trigger: escalation2,
+            });
+            ids.push(id3);
+
+            // Store these newly created scheduled alarms
+            const newAlarms = [
+                ...alarms,
+                ...ids.map(id => ({ id, eventId: event.id, time: trigger.toISOString(), active: true, label: 'reminder' }))
+            ];
+            setAlarms(newAlarms);
+            await StorageService.saveAlarms(newAlarms);
+        }
+    };
+
     const updateEvent = async (updatedEvent: VoxEvent) => {
         // For update, we need ID.
         // Convert string ID to Id<"events"> if needed, or assume it's passed correctly
@@ -76,6 +136,23 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         if (updatedEvent.alarmId) {
             await scheduleEventAlarm(updatedEvent);
         }
+    };
+
+    const cancelEventAlarms = async (eventId: string, currentAlarmsList?: VoxAlarm[]) => {
+        const listToFilter = currentAlarmsList || alarms;
+        const eventAlarms = listToFilter.filter(a => a.eventId === eventId);
+
+        for (const alarm of eventAlarms) {
+            try {
+                await Notifications.cancelScheduledNotificationAsync(alarm.id);
+            } catch (e) {
+                console.warn("Failed to cancel alarm", alarm.id, e);
+            }
+        }
+
+        const remainingAlarms = listToFilter.filter(a => a.eventId !== eventId);
+        setAlarms(remainingAlarms);
+        await StorageService.saveAlarms(remainingAlarms);
     };
 
     const deleteEvent = async (id: string) => {

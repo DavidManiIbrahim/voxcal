@@ -38,7 +38,7 @@ export const updateEvent = mutation({
     },
     handler: async (ctx, args) => {
         const { id, ...rest } = args;
-        await ctx.db.patch(id, rest); // Note: patch updates existing fields
+        await ctx.db.patch(id, rest);
     },
 });
 

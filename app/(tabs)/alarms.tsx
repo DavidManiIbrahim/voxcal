@@ -1,4 +1,3 @@
-
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { useApp } from '@/contexts/AppContext';
@@ -106,7 +105,10 @@ export default function AlarmsScreen() {
     };
 
     // Filter for events with alarms
-    const activeAlarms = events.filter(e => e.alarmId).sort((a, b) => new Date(a.startDate).getTime() - new Date(b.startDate).getTime());
+    //const activeAlarms = events.filter(e => e.alarmId).sort((a, b) => new Date(a.startDate).getTime() - new Date(b.startDate).getTime());
+    // Safe filter just in case events is empty during init
+    const activeAlarms = (events || []).filter(e => e && e.alarmId).sort((a, b) => new Date(a.startDate).getTime() - new Date(b.startDate).getTime());
+
 
     const renderItem = ({ item }) => {
         const isExpanded = expandedId === item.id;
