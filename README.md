@@ -32,12 +32,26 @@ Production ready cross-platform mobile app combining Calendar, Alarm Clock, and 
 
 - **Framework**: React Native (Expo).
 - **Navigation**: Expo Router (File-based routing).
-- **State**: React Context + AsyncStorage.
+- **State**: React Context + Firestore + AsyncStorage.
 - **Services**:
   - `NotificationService`: Handles scheduling and permissions.
   - `VoiceService`: Text-to-Speech engine.
   - `StorageService`: Local persistence.
+  - `FirebaseService`: Cloud Database (Events).
 - **UI Components**: Custom Calendar Month view, Themed components.
+
+## Configuration
+
+Create a `.env.local` file with your Firebase configuration:
+
+```env
+EXPO_PUBLIC_FIREBASE_API_KEY=your_k
+EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN=your_d
+EXPO_PUBLIC_FIREBASE_PROJECT_ID=your_id
+EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET=your_bucket
+EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=your_msg_id
+EXPO_PUBLIC_FIREBASE_APP_ID=your_app_id
+```
 
 ## Permissions
 

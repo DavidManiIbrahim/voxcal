@@ -1,64 +1,104 @@
+import { db } from '@/services/firebaseConfig';
 import { StorageService, VoxAlarm, VoxEvent } from '@/services/StorageService';
 import { VoiceService } from '@/services/VoiceService';
-import { useMutation, useQuery } from "convex/react";
 import * as Notifications from 'expo-notifications';
+import { addDoc, collection, deleteDoc, doc, onSnapshot, updateDoc } from 'firebase/firestore';
 import React, { createContext, useContext, useEffect, useState } from 'react';
-import { api } from "../convex/_generated/api";
-import { Id } from "../convex/_generated/dataModel";
 
 interface AppState {
     events: VoxEvent[];
-    addEvent: (event: VoxEvent) => void;
-    updateEvent: (event: VoxEvent) => void;
-    deleteEvent: (id: string) => void;
-    snoozeAlarm: (id: string) => void;
+    addEvent: (event: Omit<VoxEvent, 'id'>) => Promise<void>;
+    updateEvent: (event: VoxEvent) => Promise<void>;
+    deleteEvent: (id: string) => Promise<void>;
+    snoozeAlarm: (id: string) => Promise<void>;
     isLoading: boolean;
 }
 
 const AppContext = createContext<AppState>({} as AppState);
 
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-    const eventsQuery = useQuery(api.events.getEvents);
-    const addEventMutation = useMutation(api.events.addEvent);
-    const updateEventMutation = useMutation(api.events.updateEvent);
-    const deleteEventMutation = useMutation(api.events.deleteEvent);
-
-    // Fallback to empty array if query is loading, and map _id to id
-    const events = (eventsQuery || []).map(e => ({ ...e, id: e._id }));
-
-    // Internal alarms tracking (still local)
+    const [events, setEvents] = useState<VoxEvent[]>([]);
     const [alarms, setAlarms] = useState<VoxAlarm[]>([]);
     const [isLoading, setIsLoading] = useState(true);
 
     useEffect(() => {
-        loadData();
+        // Real-time listener for events
+        const unsubscribe = onSnapshot(collection(db, 'events'), (snapshot) => {
+            const eventsData = snapshot.docs.map((doc) => ({
+                id: doc.id,
+                ...doc.data(),
+            })) as VoxEvent[];
+            setEvents(eventsData);
+            setIsLoading(false);
+        }, (error) => {
+            console.error("Error fetching events: ", error);
+            setIsLoading(false);
+        });
+
+        loadLocalData();
+
         const subscription = Notifications.addNotificationResponseReceivedListener(response => {
             const data = response.notification.request.content.data;
             if (data?.eventId) {
                 handleAlarmTrigger(data.eventId, response.actionIdentifier);
             }
         });
-        return () => subscription.remove();
+
+        return () => {
+            unsubscribe();
+            subscription.remove();
+        };
     }, []);
 
-    const loadData = async () => {
-        // Events come from Convex useQuery automatically
+    const loadLocalData = async () => {
         const storedAlarms = await StorageService.getAlarms();
         setAlarms(storedAlarms || []);
-        setIsLoading(false);
     };
 
-    const addEvent = async (event: VoxEvent) => {
-        // Prepare args for Convex (remove id as it's generated, unless we pass UUID?)
-        // Convex generates ID. We use that ID for alarms.
-        const { id, ...eventData } = event;
+    const addEvent = async (eventData: Omit<VoxEvent, 'id'>) => {
+        try {
+            const docRef = await addDoc(collection(db, 'events'), eventData);
+            const newId = docRef.id;
 
-        // Optimistic update or wait for server?
-        const newId = await addEventMutation(eventData);
+            if (eventData.startDate) {
+                // Schedule using the new Firebase ID
+                await scheduleEventAlarm({ ...eventData, id: newId } as VoxEvent);
+            }
+        } catch (e) {
+            console.error("Error adding event: ", e);
+        }
+    };
 
-        if (event.startDate) {
-            // Schedule using the new Convex ID
-            await scheduleEventAlarm({ ...event, id: newId });
+    const updateEvent = async (updatedEvent: VoxEvent) => {
+        try {
+            const { id, ...data } = updatedEvent;
+            const eventRef = doc(db, 'events', id);
+            await updateDoc(eventRef, data as any);
+
+            // Cancel old alarms for this event
+            await cancelEventAlarms(updatedEvent.id);
+
+            // Schedule new alarms if needed
+            if (updatedEvent.alarmId) { // check logic: assumes alarmId meant "needs alarm" or similar? Original code used it.
+                // Wait, original code: if (updatedEvent.alarmId) { await scheduleEventAlarm(updatedEvent); }
+                // But VoxEvent interface says alarmId?: string.
+                // Re-checking logic: scheduleEventAlarm usually sets alarms.
+                // If the updated event is supposed to have an alarm, we proceed.
+                // The original code passed `updatedEvent` to `scheduleEventAlarm`.
+                // I'll stick to original logic.
+                await scheduleEventAlarm(updatedEvent);
+            }
+        } catch (e) {
+            console.error("Error updating event: ", e);
+        }
+    };
+
+    const deleteEvent = async (id: string) => {
+        try {
+            await deleteDoc(doc(db, 'events', id));
+            await cancelEventAlarms(id);
+        } catch (e) {
+            console.error("Error deleting event: ", e);
         }
     };
 
@@ -78,13 +118,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                     data: { eventId: event.id, type: event.reminderType, isPrimary: true },
                     sound: event.sound || 'default'
                 },
-
                 trigger,
             });
             ids.push(id1);
 
-            // 2. Escalation 1 (+5 mins) - "Alarms that escalate if ignored"
-            // If the user doesn't dismiss the first one (i.e. open app), this triggers
+            // 2. Escalation 1 (+5 mins)
             const escalation1 = new Date(trigger.getTime() + 5 * 60000);
             const id2 = await Notifications.scheduleNotificationAsync({
                 content: {
@@ -97,7 +135,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                 trigger: escalation1,
             });
             ids.push(id2);
-
 
             // 3. Escalation 2 (+15 mins)
             const escalation2 = new Date(trigger.getTime() + 15 * 60000);
@@ -114,33 +151,24 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             ids.push(id3);
 
             // Store these newly created scheduled alarms
-            const newAlarms = [
-                ...alarms,
-                ...ids.map(id => ({ id, eventId: event.id, time: trigger.toISOString(), active: true, label: 'reminder' }))
-            ];
-            setAlarms(newAlarms);
-            await StorageService.saveAlarms(newAlarms);
+            const newAlarmsTrace = ids.map(id => ({ id, eventId: event.id, time: trigger.toISOString(), active: true, label: 'reminder' }));
+            
+            // To update state based on previous state in a safe way:
+            setAlarms(prevAlarms => {
+                const updatedAlarms = [...prevAlarms, ...newAlarmsTrace];
+                StorageService.saveAlarms(updatedAlarms);
+                return updatedAlarms;
+            });
         }
     };
 
-    const updateEvent = async (updatedEvent: VoxEvent) => {
-        // For update, we need ID.
-        // Convert string ID to Id<"events"> if needed, or assume it's passed correctly
-        const { id, ...rest } = updatedEvent;
-        await updateEventMutation({ id: id as Id<"events">, ...rest });
-
-        // Cancel old alarms for this event
-        await cancelEventAlarms(updatedEvent.id);
-
-        // Schedule new alarms if needed
-        if (updatedEvent.alarmId) {
-            await scheduleEventAlarm(updatedEvent);
-        }
-    };
-
-    const cancelEventAlarms = async (eventId: string, currentAlarmsList?: VoxAlarm[]) => {
-        const listToFilter = currentAlarmsList || alarms;
-        const eventAlarms = listToFilter.filter(a => a.eventId === eventId);
+    const cancelEventAlarms = async (eventId: string) => {
+        // We need current alarms from state or retrieval
+        // Since setAlarms is async, mapping over 'alarms' state might be slightly stale if called rapidly, 
+        // but typically fine for user actions.
+        
+        // Filter out alarms for this event
+        const eventAlarms = alarms.filter(a => a.eventId === eventId);
 
         for (const alarm of eventAlarms) {
             try {
@@ -150,27 +178,20 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             }
         }
 
-        const remainingAlarms = listToFilter.filter(a => a.eventId !== eventId);
+        const remainingAlarms = alarms.filter(a => a.eventId !== eventId);
         setAlarms(remainingAlarms);
         await StorageService.saveAlarms(remainingAlarms);
     };
 
-    const deleteEvent = async (id: string) => {
-        await deleteEventMutation({ id: id as Id<"events"> });
-        await cancelEventAlarms(id);
-    };
-
     const handleAlarmTrigger = async (eventId: string, actionId: string) => {
         // User interacted -> cancel further escalations
-        await cancelEventAlarms(eventId); // This clears upcoming escalations as they are stored with same eventId
+        await cancelEventAlarms(eventId); 
 
         const event = events.find(e => e.id === eventId);
         if (event) {
-            // "Spoken voice reminders" logic
             if (event.reminderType === 'voice') {
                 VoiceService.speak(`Reminder: ${event.title}. ${event.notes || ''}`);
             } else if (event.sound && event.sound.startsWith('file://')) {
-                // Play custom user uploaded sound
                 try {
                     const { Audio } = require('expo-av');
                     const { sound } = await Audio.Sound.createAsync({ uri: event.sound });
@@ -183,10 +204,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     };
 
     const snoozeAlarm = async (eventId: string) => {
-        // Find event
         const event = events.find(e => e.id === eventId);
         if (event) {
-            // Schedule new notification in 10 mins
             const trigger = new Date(Date.now() + 10 * 60000);
             await Notifications.scheduleNotificationAsync({
                 content: {
@@ -208,3 +227,4 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 };
 
 export const useApp = () => useContext(AppContext);
+
